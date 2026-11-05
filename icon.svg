@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="tailtransit-bg" x1="8" y1="2" x2="56" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132134"/>
+      <stop offset="1" stop-color="#0A0E16"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#tailtransit-bg)"/>
+  <rect x=".75" y=".75" width="62.5" height="62.5" rx="14.25" stroke="#223149" stroke-width="1.5"/>
+  <path d="M17 48V31a15 15 0 0 1 30 0v17"
+        stroke="#2DD4BF" stroke-width="4.6" stroke-linecap="round"/>
+  <path d="M25 48V34a7 7 0 0 1 14 0v14"
+        stroke="#38BDF8" stroke-width="4.6" stroke-linecap="round"/>
+</svg>

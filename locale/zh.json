@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tailtransit（仅 Harness）",
+    "description": "Tailtransit：以独立用户态 tailscaled 代理承载 Harness 的网页与命令行走 Tailscale 出口，系统其他流量保持原路由。"
+  }
+}
