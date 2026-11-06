@@ -100,7 +100,7 @@ NO_PROXY=localhost,127.0.0.1,::1,...
 - userspace 只代理 TCP。`ssh`、ICMP、UDP 不走，`ssh` 得自己配 `ProxyCommand`。
 - 会多一个 tailnet 设备，需要在管理台允许它用 exit node。
 - userspace 下 MagicDNS 和 split DNS 有限制，普通域名还是系统 DNS 解析。
-- 系统 Tailscale 服务不能同时开 exit node，否则路由还是冲突。
+- 系统 Tailscale 服务可以同时开 exit node，实测互不影响：插件走自己的用户态实例和本地代理，系统流量继续走系统路由。
 - 插件把 `web.fetchProvider` 钉死在 `tailtransit`。只禁用不卸载时，`web_fetch` 会报 provider 未注册。
 - profile 安装的插件读不到 `@deepseek-ai/*`，所以没有 Config schema，设置只能走面板和 `config.json`。
 - 改完 client 要完全退出 Harness 再开，刷新页面不够。
