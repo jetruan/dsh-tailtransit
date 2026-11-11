@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Transport tests
+        run: node --test test/transport.test.mjs
+      - name: Privacy gate tests
+        run: node test/sensitive-gate.test.mjs
+
+  privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Scan the tracked tree
+        run: node scripts/check-sensitive.mjs --all
+      - name: Scan pushed commits
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        shell: bash
+        run: |
+          if git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null; then
+            node scripts/check-sensitive.mjs --range "${{ github.event.before }}..${{ github.sha }}"
+          else
+            echo "previous head is not available (force push); scanning the tree instead"
+            node scripts/check-sensitive.mjs --all
+          fi
+      - name: Scan pull request commits
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-sensitive.mjs --range "${{ github.event.pull_request.base.sha }}..${{ github.sha }}"

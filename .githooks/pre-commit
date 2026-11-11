@@ -1,0 +1,13 @@
+#!/bin/sh
+# Privacy gate: block IP addresses, personal identifiers and credentials from
+# entering a commit. Installed with `npm run hooks:install`.
+set -e
+
+root=$(git rev-parse --show-toplevel) || exit 1
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "privacy-gate: node is required to scan staged files" >&2
+  exit 1
+fi
+
+exec node "$root/scripts/check-sensitive.mjs" --staged

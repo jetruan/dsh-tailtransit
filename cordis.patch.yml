@@ -1,0 +1,19 @@
+# Harness-scoped Tailscale egress.
+#
+# The web service pins its fetch capability to the provider this bundle
+# registers, so `web_fetch` leaves through the per-user userspace proxy
+# instead of the machine's default route.
+- id: web
+  name: '@deepseek-ai/dsh-web'
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: tailtransit
+
+- insert:
+    - id: tailtransit
+      name: 'dsh-tailtransit'
+      config:
+        # Name or IP of the exit node the Harness should use. Empty means the
+        # proxy reaches the tailnet only; set it to route public traffic out
+        # through your exit node.
+        exitNode: ''

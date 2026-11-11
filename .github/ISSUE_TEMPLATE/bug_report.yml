@@ -1,0 +1,52 @@
+name: Bug report
+description: 报告一个可复现的问题
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请先确认：已安装 Tailscale、已重启 Harness、问题在最新版本仍能复现。
+        不要粘贴 auth key、`.env` 或完整 `config.json`。
+  - type: input
+    id: os
+    attributes:
+      label: 系统
+      placeholder: "Windows 11 23H2 / macOS 14.5 (Apple Silicon)"
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: 版本
+      placeholder: "Tailtransit 0.1.0, Tailscale 1.80, Harness x.y"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 实际表现与预期表现
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 Tailtransit
+        2. 切换出口节点
+        3. ...
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 诊断信息
+      description: 面板 → 操作 → 复制诊断，粘贴到这里（已自动脱敏的部分除外，请自行检查）
+      render: json
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: 确认
+      options:
+        - label: 我已移除 auth key、令牌、内网地址等敏感信息
+          required: true

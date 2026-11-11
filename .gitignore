@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+coverage/
+dist/
+
+# local-only notes, kept out of the public repository
+HANDOVER.md
+
+# scratch files used while writing commit messages
+.git-commit-msg.txt
+
+# runtime state if a stateDir is ever pointed at the repository
+authkey
+daemon.pid
+tailscaled.state

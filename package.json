@@ -1,0 +1,61 @@
+{
+  "name": "dsh-tailtransit",
+  "version": "0.2.5",
+  "description": "Give Harness its own Tailscale exit without changing how the rest of the machine connects: only web fetches and shell commands use the exit node, model traffic stays direct",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "tailscale",
+    "egress",
+    "proxy",
+    "cordis",
+    "vpn",
+    "split-tunneling",
+    "dsh-plugin"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jetruan/dsh-tailtransit.git"
+  },
+  "homepage": "https://github.com/jetruan/dsh-tailtransit#readme",
+  "bugs": {
+    "url": "https://github.com/jetruan/dsh-tailtransit/issues"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "transport.js",
+    "noproxy.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node test/transport.test.mjs && node test/noproxy.test.mjs && node test/probe.test.mjs && node test/sensitive-gate.test.mjs",
+    "check:privacy": "node scripts/check-sensitive.mjs --all",
+    "check:privacy:history": "node scripts/check-sensitive.mjs --history",
+    "hooks:install": "git config core.hooksPath .githooks"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

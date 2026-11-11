@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "allow": [
+    {
+      "rule": "private-ipv4",
+      "file": "noproxy.js",
+      "value": "10.0.0.0",
+      "reason": "RFC 1918 example in the module comment explaining why CIDR entries never match"
+    },
+    {
+      "rule": "*",
+      "file": ".sensitive-gate.json",
+      "reason": "the policy file has to spell out the exceptions it grants; every change to it is reviewed"
+    },
+    {
+      "rule": "private-ipv4",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["10.1.2.3", "172.16.0.1", "192.168.1.1", "100.64.0.1", "100.64.1.2", "10.0.0.0"],
+      "reason": "unit-test fixtures, not real addresses"
+    },
+    {
+      "rule": "public-ipv4",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["8.8.8.8"],
+      "reason": "unit-test fixture, not a user address"
+    },
+    {
+      "rule": "private-ipv6",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["fd00::1"],
+      "reason": "unit-test fixture"
+    },
+    {
+      "rule": "public-ipv6",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["2001:4860:4860::8888"],
+      "reason": "unit-test fixture"
+    },
+    {
+      "rule": "email",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["someone@corp-mail.com", "fixture@corp-mail.com"],
+      "reason": "unit-test fixtures"
+    },
+    {
+      "rule": "internal-host",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["gateway.internal"],
+      "reason": "unit-test fixture"
+    },
+    {
+      "rule": "tailnet-dns",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["node.tailnet.ts.net"],
+      "reason": "unit-test fixture"
+    },
+    {
+      "rule": "user-path",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["C:\\\\Users\\\\alice", "/home/alice"],
+      "reason": "unit-test fixtures"
+    },
+    {
+      "rule": "tailscale-key",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["tskey-auth-abcdefgh12345678"],
+      "reason": "unit-test fixture, not a real key"
+    },
+    {
+      "rule": "private-key",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["-----BEGIN OPENSSH PRIVATE KEY-----"],
+      "reason": "unit-test fixture, not a real key"
+    },
+    {
+      "rule": "secret-assignment",
+      "file": "test/sensitive-gate.test.mjs",
+      "value": ["A1b2C3d4E5f6G7h8J9k0"],
+      "reason": "unit-test fixture, not a real secret"
+    }
+  ],
+  "denyCategories": {
+    "company-domain": [
+      "7d31e7ce7dd52edef02e92157c4a924566796e01dd6d7ee4fe8649c645c9fc2c",
+      "b8861516a65f999611d9eca52ae6bff9db9cde55d99e30f6c41ace314e100eec",
+      "239900215cd5000eb3eb255855e59fb1010cbcf8c08598d0d73e082703c79ae5"
+    ],
+    "device-name": [
+      "b017d4e91d26b9458cd153f320976166639730043e05fafc359b8a6842836d36",
+      "7aa65dc9e5ef03cf96bedd354752e9ee56f3599288db3bc2ca0639cc55148369",
+      "acb684baafff9bb574833ea71c2a4eb1771dc406d0dec4cdcd148379cdd01f71"
+    ]
+  },
+  "denyCategoryNotes": {
+    "company-domain": "employer / internal API domain; never re-add to the repository",
+    "device-name": "tailnet device names exposed in old screenshots"
+  },
+  "denyHashes": []
+}

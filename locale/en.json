@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tailtransit (Harness Only)",
+    "description": "Tailtransit runs a per-user userspace tailscaled proxy so only Harness web and shell traffic uses Tailscale; the rest of the system keeps its own routes."
+  }
+}

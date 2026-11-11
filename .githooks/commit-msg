@@ -1,0 +1,13 @@
+#!/bin/sh
+# Privacy gate: a commit message must not carry a key, an email or an address.
+set -e
+
+root=$(git rev-parse --show-toplevel) || exit 1
+[ -f "$1" ] || exit 0
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "privacy-gate: node is required to scan the commit message" >&2
+  exit 1
+fi
+
+exec node "$root/scripts/check-sensitive.mjs" --message "$1"

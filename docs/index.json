@@ -1,0 +1,66 @@
+{
+  "format": 1,
+  "title": {
+    "en": "Tailtransit",
+    "zh": "Tailtransit"
+  },
+  "description": {
+    "en": "Plugins for keeping Harness's network egress separate from the machine's.",
+    "zh": "让 Harness 的出网与整机网络互不干扰的插件索引。"
+  },
+  "metadata": {
+    "categories": {
+      "network": {
+        "title": {
+          "en": "Network",
+          "zh": "网络"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-tailtransit",
+      "title": {
+        "en": "Tailtransit",
+        "zh": "Tailtransit"
+      },
+      "description": {
+        "en": "Give Harness its own Tailscale exit node: web fetches, shell commands, plugins and LLM each switch independently, with system routes and DNS untouched.",
+        "zh": "让 Harness 的网页抓取、命令行、其他插件与大模型各自选择是否走 Tailscale 出口节点，系统路由和 DNS 不动。"
+      },
+      "icon": "./icon.svg",
+      "author": "r2j",
+      "homepage": "https://github.com/jetruan/dsh-tailtransit#readme",
+      "repository": {
+        "url": "https://github.com/jetruan/dsh-tailtransit"
+      },
+      "metadata": {
+        "category": "network",
+        "keywords": [
+          "tailscale",
+          "proxy",
+          "egress",
+          "vpn",
+          "split-tunneling"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.2.3",
+          "publishTimestamp": 1794391545,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.2.2",
+          "publishTimestamp": 1794388526,
+          "source": {
+            "type": "npm"
+          }
+        }
+      ]
+    }
+  ]
+}
