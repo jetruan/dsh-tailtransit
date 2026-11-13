@@ -1008,7 +1008,10 @@ class TailscaleEgress {
       maxChars: 200,
       userAgent: this.config.userAgent,
     }
-    const probe = 'https://ifconfig.me/ip'
+    // An IPv4-only echo endpoint: a dual-stack probe (e.g. ifconfig.me) answers
+    // with whichever family the OS picked for that connection, so the panel
+    // showed IPv4 and IPv6 on alternate runs.
+    const probe = 'https://ipv4.icanhazip.com/'
     const result = { proxied: '', direct: '', error: '' }
     const proxyUrl = this.enabled && this.proxyReady ? this.proxyUrl() : undefined
     try {
