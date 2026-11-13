@@ -223,7 +223,7 @@ NO_PROXY=localhost,127.0.0.1,::1,...
 
 ### 安全说明
 
-代理服务默认仅监听 `127.0.0.1`，且不提供身份验证，不建议配置为公网可访问地址。Auth Key 保存于状态目录下，权限已尽可能设置为 `0600`；日志仅写入本地。插件不采集遥测数据，也不上传账号信息；仅在你点击「测试出口」时请求 `ifconfig.me` 以显示出口与直连 IP。
+代理服务默认仅监听 `127.0.0.1`，且不提供身份验证，不建议配置为公网可访问地址。Auth Key 保存于状态目录下，权限已尽可能设置为 `0600`；日志仅写入本地。插件不采集遥测数据，也不上传账号信息；仅在你点击「测试出口」时请求 `ipv4.icanhazip.com` 以显示出口与直连 IP。
 
 安全漏洞请按 [SECURITY.md](SECURITY.md) 的说明私下报告。请勿在公开 Issue、日志或诊断信息中披露 Auth Key、Tailnet 地址或其他敏感凭据。
 
@@ -460,7 +460,7 @@ The system Tailscale service may run an Exit Node simultaneously; in practice th
 
 ### Security
 
-The proxy listens on `127.0.0.1` only and provides no authentication; it should not be exposed on a publicly reachable address. Auth Keys are stored under the state directory with permissions set to `0600` wherever possible, and logs are written locally only. The plugin collects no telemetry and uploads no account data; the only external diagnostic request is the `ifconfig.me` lookup behind the "Test exit" button, used to show the exit and direct IPs.
+The proxy listens on `127.0.0.1` only and provides no authentication; it should not be exposed on a publicly reachable address. Auth Keys are stored under the state directory with permissions set to `0600` wherever possible, and logs are written locally only. The plugin collects no telemetry and uploads no account data; the only external diagnostic request is the `ipv4.icanhazip.com` lookup behind the "Test exit" button, used to show the exit and direct IPs.
 
 Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Do not disclose Auth Keys, tailnet addresses or other sensitive credentials in public issues, logs or diagnostic output.
 

@@ -1,6 +1,6 @@
 {
   "name": "dsh-tailtransit",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Give Harness its own Tailscale exit without changing how the rest of the machine connects: only web fetches and shell commands use the exit node, model traffic stays direct",
   "license": "MIT",
   "type": "module",

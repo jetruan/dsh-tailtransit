@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+暂无。
+
+## 0.2.6 — 2026-11-13
+
+修复「测试出口」显示的直连 IP 在 IPv4 与 IPv6 之间跳动的问题，并转入隐私门禁等工程变更。
+
+**修复**
+
+- 探测地址从 `https://ifconfig.me/ip` 改为 `https://ipv4.icanhazip.com/`。前者是双栈端点，返回哪个地址族取决于系统为该次连接选定的地址（DNS 记录顺序、RFC 6724 排序、Happy Eyeballs 竞速），因此双栈网络上直连 IP 会时而显示 IPv4、时而显示 IPv6；后者仅发布 A 记录，出口与直连两条探测均稳定返回 IPv4。
+
+**工程**
+
 仅工程与文档变更，无运行时行为变更。
 
 - 新增依赖无关的隐私门禁 `scripts/check-sensitive.mjs`：拦截 IP、邮箱、内部与 tailnet 域名、Auth Key、云令牌、私钥、带用户名的绝对路径，以及已脱敏标识的哈希
