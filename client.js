@@ -1090,15 +1090,14 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         ctx.effect(() => {
-          try {
-            return require('styles').insert(css)
-          } catch {
-            const el = document.createElement('style')
-            el.setAttribute('data-dsh-tailtransit', '')
-            el.textContent = css
-            document.head.appendChild(el)
-            return () => el.remove()
-          }
+          // A package owns its stylesheet directly: `styles` is not a platform
+          // seed word of the browser module table, so the module loader would
+          // reject `require('styles')` on every load.
+          const el = document.createElement('style')
+          el.setAttribute('data-dsh-tailtransit', '')
+          el.textContent = css
+          document.head.appendChild(el)
+          return () => el.remove()
         })
         ctx.slots.inject('sidebar.panellist', () =>
           ctx.slots.register({ name: 'sidebar.panellist', id: 'tailtransit', order: 30, label: 'Tailtransit' }, Icon))
