@@ -15,7 +15,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Matches engines.node: DSH requires Node 24.9+ from 0.2.2-rc.3 on.
+          node-version: 24
       - name: Transport tests
         run: node --test test/transport.test.mjs
       - name: Privacy gate tests
@@ -29,7 +30,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
       - name: Scan the tracked tree
         run: node scripts/check-sensitive.mjs --all
       - name: Scan pushed commits

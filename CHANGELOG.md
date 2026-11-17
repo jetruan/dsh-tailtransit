@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.7 — 2026-11-17
 
 适配 DeepSeek Harness 0.2.2-rc.3，修正两处与 rc3 不一致之处。
 
@@ -12,6 +12,7 @@
 
 - `package.json` 新增 `engines.dsh: ">=0.2.2-rc.1 <0.3.0"`。rc3 起插件兼容性检查优先读 `engines.dsh`，声明后该范围单独决定，不再回退到 peer 规则；此前未声明，任何不兼容的 rc 版本只会在运行时静默失败，而不会被安装时拦下。
 - `engines.node` 由 `>=20` 改为 `>=24.9.0`，与 DSH 自 rc3 起的最低 Node 要求一致。
+- CI 的 Node 版本由 22 改为 24，与 `engines.node` 对齐；此前 CI 实际未覆盖声明的最低运行环境。
 
 ## 0.2.6 — 2026-11-13
 
