@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.8 — 2026-11-19
+
+仅文档更新，无代码变更。
+
+核实插件在 DeepSeek Harness `0.2.2-rc.5` 上的兼容性，并把结论写进文档。
+
+**兼容性核实**
+
+- rc5 相对 rc3 新增两条升级项：`v0.2.2-rc.3/deepseek-refusal-code`（流式拒绝码 `MALFORMED_RESPONSE` 更名为 `CONTENT_REFUSED`）与 `v0.2.2-rc.4/web-search-deepseek-model-default`（基座组合不再固定 `searchProvider`，改为按模型路由自动选择）。前者插件不涉及；后者因插件在自己的补丁中显式设置了 `searchProvider: deepseek-official` 与 `fetchProvider: tailtransit`，按官方说明不受影响，且 `deepseek-official` 在 rc5 中仍是有效提供方 id。
+- 逐一实测确认所用 API 未变：`ctx.web.registerFetchProvider` 及其提供方选择失败语义、`WebFetchResult` 结构、`ctx.webServer.register` 的 `WebRouteKind`、`ctx.tools.register`（未使用 `{ when }`，不受 `conditional-tools` 变更影响）、`sidebar.panellist` 与 `main` 槽位。`styles` 仍未出现在 rc5 的浏览器种子模块表中，0.2.7 的修复依然必要。
+- 实机状态正常：`Running`、`proxyReady` 为真、出口节点在线，出口与直连 IP 正常分离，跨域重定向策略仍为阻断。
+
+**文档**
+
+- README 中英双语的 Harness 要求改为 `0.2.2-rc.1` ~ `0.2.2-rc.5`，Node.js 要求改为 24.9 或更高，徽章同步更新。
+- 新增「兼容性 / Compatibility」一节，说明 `engines.dsh` 的生效方式与已验证版本。
+
 ## 0.2.7 — 2026-11-17
 
 适配 DeepSeek Harness 0.2.2-rc.3，修正两处与 rc3 不一致之处。

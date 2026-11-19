@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/github/license/jetruan/dsh-tailtransit?color=2dd4bf)](LICENSE)
 [![npm](https://img.shields.io/npm/v/dsh-tailtransit?color=2dd4bf)](https://www.npmjs.com/package/dsh-tailtransit)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-38bdf8)](#-环境要求)
-[![Node](https://img.shields.io/badge/node-%E2%89%A520-5fa04e)](package.json)
+[![Node](https://img.shields.io/badge/node-%E2%89%A524.9-5fa04e)](package.json)
 
 [中文](#-中文) · [English](#-english)
 
@@ -82,8 +82,8 @@ flowchart LR
 |---|---|
 | 操作系统 | Windows 10 / 11，或 macOS 13 及以上。Linux 尚未经过完整功能验证，当前不作为正式支持平台。 |
 | Tailscale | 需要独立的 `tailscaled` 与 `tailscale` 可执行文件 |
-| Harness | DeepSeek Harness 桌面版，支持安装 Cordis 插件 |
-| Node.js | 20 或更高版本 |
+| Harness | DeepSeek Harness 桌面版 `0.2.2-rc.1` ~ `0.2.2-rc.5`，支持安装 Cordis 插件。已逐项验证 rc3 与 rc5 |
+| Node.js | 24.9 或更高版本（与 Harness 自 `0.2.2-rc.3` 起的最低要求一致） |
 
 `tailscaled` 与 `tailscale` 的安装方式：
 
@@ -91,6 +91,19 @@ flowchart LR
 - **macOS**：执行 `brew install tailscale`。App Store 版本不包含可独立运行的 `tailscaled`，无法使用。
 
 可执行文件路径通常可自动识别。若无法识别，可在 `config.json` 中设置 `tailscaledPath` 与 `tailscalePath`。
+
+### 兼容性
+
+插件在 `package.json` 中声明 `engines.dsh: ">=0.2.2-rc.1 <0.3.0"`。自 Harness `0.2.2-rc.3` 起，插件兼容性检查优先读取该字段，声明后由它单独决定，不再回退到 peer 依赖规则；版本不符时会在安装阶段被拒绝，而不是等到运行时报错。
+
+已验证的版本：
+
+| Harness 版本 | 结论 | 说明 |
+|---|---|---|
+| `0.2.2-rc.3` | 兼容 | 适配两处：面板样式不再依赖浏览器模块表中不存在的 `styles` 模块；补上 `engines.dsh` 声明 |
+| `0.2.2-rc.5` | 兼容，无需改动 | rc.3、rc.4 新增的两条升级项（流式拒绝码更名、搜索提供方默认值调整）均不影响本插件 |
+
+关于 rc.5 的搜索提供方变更：基座组合不再固定 `searchProvider`，改由模型路由自动选择。本插件在自己的补丁中显式设置了 `searchProvider: deepseek-official` 与 `fetchProvider: tailtransit`，按官方说明显式设置者不受该默认值变化影响；`deepseek-official` 在 rc.5 中仍是有效提供方 id。
 
 ### 安装
 
@@ -319,8 +332,8 @@ Tailtransit does not engage the system Tailscale service. Instead it runs a sepa
 |---|---|
 | Operating system | Windows 10 / 11, or macOS 13 and later. Linux has not been fully validated and is not currently a supported platform. |
 | Tailscale | Standalone `tailscaled` and `tailscale` binaries |
-| Harness | DeepSeek Harness desktop, able to install Cordis plugins |
-| Node.js | 20 or later |
+| Harness | DeepSeek Harness desktop `0.2.2-rc.1` to `0.2.2-rc.5`, able to install Cordis plugins. Verified item by item on rc3 and rc5 |
+| Node.js | 24.9 or later (matches the minimum Harness requires from `0.2.2-rc.3` on) |
 
 Installing `tailscaled` and `tailscale`:
 
@@ -328,6 +341,19 @@ Installing `tailscaled` and `tailscale`:
 - **macOS**: run `brew install tailscale`. The App Store build ships no standalone `tailscaled` and cannot be used.
 
 Binary paths are normally detected automatically. If detection fails, set `tailscaledPath` and `tailscalePath` in `config.json`.
+
+### Compatibility
+
+The plugin declares `engines.dsh: ">=0.2.2-rc.1 <0.3.0"` in `package.json`. From Harness `0.2.2-rc.3` on, the plugin compatibility check reads that field first and a declared range decides on its own, without falling back to the peer dependency rule; a mismatch is refused at install time rather than failing later at runtime.
+
+Verified versions:
+
+| Harness version | Result | Notes |
+|---|---|---|
+| `0.2.2-rc.3` | Compatible | Two adaptations: the panel no longer relies on a `styles` module that is absent from the browser module table, and the manifest declares `engines.dsh` |
+| `0.2.2-rc.5` | Compatible, no changes needed | Neither of the two upgrade items new in rc.3 and rc.4 (the streamed refusal code rename and the search provider default) affects this plugin |
+
+On the rc.5 search provider change: the base composition no longer fixes `searchProvider`, leaving selection to the model route. This plugin sets `searchProvider: deepseek-official` and `fetchProvider: tailtransit` explicitly in its own patch, and the official guidance states that a composition setting these itself sees no change; `deepseek-official` remains a valid provider id in rc.5.
 
 ### Installation
 
