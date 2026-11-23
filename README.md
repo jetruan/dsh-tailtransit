@@ -81,16 +81,31 @@ flowchart LR
 | 项 | 要求 |
 |---|---|
 | 操作系统 | Windows 10 / 11，或 macOS 13 及以上。Linux 尚未经过完整功能验证，当前不作为正式支持平台。 |
-| Tailscale | 需要独立的 `tailscaled` 与 `tailscale` 可执行文件 |
+| Tailscale | 需要独立的 `tailscaled` 与 `tailscale` 可执行文件（Windows 官方客户端自带；macOS 需 Homebrew，见下） |
 | Harness | DeepSeek Harness 桌面版 `0.2.2-rc.1` ~ `0.2.2-rc.5`，支持安装 Cordis 插件。已逐项验证 rc3 与 rc5 |
 | Node.js | 24.9 或更高版本（与 Harness 自 `0.2.2-rc.3` 起的最低要求一致） |
 
 `tailscaled` 与 `tailscale` 的安装方式：
 
-- **Windows**：安装官方客户端即可，默认为 `C:\Program Files\Tailscale`
-- **macOS**：执行 `brew install tailscale`。App Store 版本不包含可独立运行的 `tailscaled`，无法使用。
+- **Windows**：官方 GUI 客户端同时安装 `tailscaled.exe` 与 `tailscale.exe`（默认在 `C:\Program Files\Tailscale`），插件直接复用其中的 `tailscaled.exe`。
+- **macOS**：执行 `brew install tailscale`。GUI 安装包（App Store 或官方 pkg）把 daemon 放进 Network Extension（`/Library/SystemExtensions`），磁盘上只有 `tailscale` 命令，没有可启动的 `tailscaled`，因此 GUI 版无法承担插件的独立 daemon，必须用 Homebrew 或自行编译。
 
 可执行文件路径通常可自动识别。若无法识别，可在 `config.json` 中设置 `tailscaledPath` 与 `tailscalePath`。
+
+macOS 上的运行方式：
+
+- 以当前用户身份运行，**不需要 root 或管理员权限**：userspace 实例不创建 TUN 设备，也不修改路由表与 DNS
+- 可以与已登录的图形界面版 Tailscale（App Store 或官方 pkg）同时存在，两者各用各的 socket 与状态目录，互不干扰
+- 首次使用时点「在浏览器中登录」，设备默认命名为 `dsh-<主机名>`；也可以用 Auth Key
+- 图标、面板与登录链接的处理与 Windows 一致
+
+平台验证：
+
+| 平台 | 结论 | 说明 |
+|---|---|---|
+| Windows 10 / 11 | 已验证 | 官方客户端自带的 `tailscaled.exe`；出口与直连分离、`web_fetch`、Shell 代理沿既有版本持续验证 |
+| macOS 13+ | 已验证 | 需 Homebrew 版 `tailscaled`；在 macOS 26.6（arm64）+ Tailscale 1.102.2 上实测登录、出口节点、`web_fetch`、Shell 代理与 tailnet 访问 |
+| Linux | 未验证 | 仅保留可执行文件候选路径，未做端到端测试 |
 
 ### 兼容性
 
@@ -109,7 +124,7 @@ flowchart LR
 
 通过 npm 安装：
 
-```powershell
+```sh
 npm install dsh-tailtransit
 ```
 
@@ -117,8 +132,8 @@ npm install dsh-tailtransit
 
 如需修改源码，可直接克隆仓库：
 
-```powershell
-git clone https://github.com/jetruan/dsh-tailtransit.git D:\tools\dsh-tailtransit
+```sh
+git clone https://github.com/jetruan/dsh-tailtransit.git <target-directory>
 ```
 
 在插件管理器中安装该目录，target 填写**绝对路径**。
@@ -151,14 +166,14 @@ https://jetruan.github.io/dsh-tailtransit/index.json
 2. **出口节点选择**：选择一个 Exit Node；也可跳过，此时仅能访问 tailnet 内网。
 3. **流量范围配置**：决定其他插件是否使用代理，以及出口不可用时的处理策略。
 
-身份认证仅需执行一次。运行状态与凭据保存于 `%USERPROFILE%\.dsh\tailtransit`。
+身份认证仅需执行一次。运行状态与凭据保存于 `$DSH_HOME/tailtransit`（Windows 默认 `%USERPROFILE%\.dsh\tailtransit`，macOS 与 Linux 为 `~/.dsh/tailtransit`）。
 
 ### 流量接管范围
 
 | 流量类型 | 实现方式 | 生效时机 | 默认状态 | 启用后行为 |
 |---|---|---|---|---|
 | Web Fetch | 注册 Fetch Provider，由 bundle patch 将 `web.fetchProvider` 指向 `tailtransit` | 立即生效 | 启用 | 请求经由出口节点转发 |
-| Shell | 将 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 与 `NODE_USE_ENV_PROXY` 写入 Harness 进程环境 | 此后启动的子进程 | 启用 | 子进程继承代理配置 |
+| Shell | 将 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 写入 Harness 进程环境；`NODE_USE_ENV_PROXY` 由启动器与 `dsh-subprocess` 传给子进程，Harness 进程本身刻意不设置 | 此后启动的子进程 | 启用 | 子进程继承代理配置 |
 | 其他插件 | 将 `HTTP_PROXY`、`HTTPS_PROXY` 与 `NO_PROXY` 写入 `$DSH_HOME/.env` | 重启 Harness 后 | 启用 | 插件自身的 `fetch` 使用代理 |
 | LLM | 调整 `.env` 中 `NO_PROXY` 的 LLM 域名列表 | 重启 Harness 后 | 关闭 | LLM 与账号请求经由出口节点转发 |
 
@@ -199,7 +214,7 @@ LLM 流量默认不经由出口节点。为避免影响其他网络行为，Tail
 | `proxyShell` | `true` | 是否向 Shell 注入代理环境变量 |
 | `webFetch` | `true` | `web_fetch` 是否经由出口节点转发 |
 | `llmProxy` | `false` | LLM 与账号请求是否经由出口节点转发。修改后需重启 Harness。 |
-| `llmNoProxy` | `deepseek.com,deepseeksvc.com` | `llmProxy` 关闭时，保持直连的 LLM 域名列表 |
+| `llmNoProxy` | 空 | 额外保持直连的 LLM 域名。默认从 provider 配置自动发现端点并写入 `NO_PROXY`，此处仅作补充 |
 | `noProxy` | `localhost,127.0.0.1,::1` | 不经由代理的域名与 IP 列表，以逗号分隔 |
 | `timeoutMs` / `maxRedirects` / `maxResponseBytes` / `maxBodyChars` | 30s / 5 / 5MB / 100k | 抓取上限配置 |
 
@@ -227,7 +242,7 @@ NO_PROXY=localhost,127.0.0.1,::1,...
 - **仅代理 TCP 流量**。userspace 模式下 `ssh`、ICMP、UDP 均不经由代理，`ssh` 需自行配置 `ProxyCommand`。
 - **会新增一个 tailnet 设备**，需在管理台授权其使用 Exit Node。
 - **MagicDNS 与 split DNS 存在限制**，普通域名仍由系统 DNS 解析。
-- **macOS 支持处于实验性阶段**。Unix socket 与 SIGTERM 收尾逻辑已按 macOS 实现，但尚未在真实设备上完成完整验证。
+- **macOS 需要 Homebrew 版的 `tailscaled`**。图形界面安装包（App Store 或官方 pkg）不提供可独立启动的 daemon。Unix socket 与 SIGTERM 收尾已在 macOS 26.6（arm64）上实测；Linux 仅保留路径候选，未经验证。
 - 插件将 `web.fetchProvider` 固定指向 `tailtransit`。仅禁用而未卸载时，`web_fetch` 会返回 provider 未注册错误。
 - 通过 profile 安装的插件无法解析 `@deepseek-ai/*`，因此未提供 Config schema，配置仅可通过面板与 `config.json` 修改。
 - 修改客户端组件后需完全重启 Harness 才能生效，刷新页面不足以加载新代码。
@@ -242,21 +257,24 @@ NO_PROXY=localhost,127.0.0.1,::1,...
 
 ### 开发
 
-```powershell
-node --test test/transport.test.mjs
+```sh
+npm test                     # transport / noproxy / probe / daemon / sensitive-gate
 node --check index.js
 node --check client.js
 ```
 
+`test/daemon.test.mjs` 需要本机存在 `tailscaled`，找不到时会自动跳过并以 0 退出；可用 `TAILTRANSIT_TAILSCALED=/path/to/tailscaled` 指定二进制。
+
 每个 clone 执行一次 `npm run hooks:install`，之后 `git commit` 会运行隐私门禁，拦截 IP、邮箱、内部域名和密钥；手动扫描用 `npm run check:privacy`。规则说明见 [CONTRIBUTING.md](CONTRIBUTING.md#隐私门禁)。
 
 ```
-index.js          Host 半：tailscaled 生命周期管理、代理、路由、工具（约 1.2k 行）
-client.js         Client 半：面板、向导、设置（约 750 行）
-transport.js      零依赖的 HTTP / SOCKS5 代理传输实现
+index.js          Host 半：tailscaled 生命周期、登录、出口节点、路由、工具
+client.js         Client 半：面板、向导、设置
+transport.js      零依赖的 HTTP 代理传输实现
+noproxy.js        NO_PROXY 与 LLM 端点的发现、合并
 cordis.patch.yml  bundle patch：将 web.fetchProvider 指向 tailtransit
 locale/           中英文元数据
-test/             transport 测试
+test/             transport / probe / daemon / 隐私门禁测试
 ```
 
 排查问题时，建议先阅读 `index.js` 顶部的模块注释，其中说明了整体设计思路。验证修改的方式为：语法检查 → 重装 bundle → 请求 `/api/tailtransit/diag`，确认 `rev` 是否发生变化。
@@ -331,16 +349,31 @@ Tailtransit does not engage the system Tailscale service. Instead it runs a sepa
 | Item | Requirement |
 |---|---|
 | Operating system | Windows 10 / 11, or macOS 13 and later. Linux has not been fully validated and is not currently a supported platform. |
-| Tailscale | Standalone `tailscaled` and `tailscale` binaries |
+| Tailscale | Standalone `tailscaled` and `tailscale` binaries (the Windows client ships them; on macOS they come from Homebrew, see below) |
 | Harness | DeepSeek Harness desktop `0.2.2-rc.1` to `0.2.2-rc.5`, able to install Cordis plugins. Verified item by item on rc3 and rc5 |
 | Node.js | 24.9 or later (matches the minimum Harness requires from `0.2.2-rc.3` on) |
 
 Installing `tailscaled` and `tailscale`:
 
-- **Windows**: install the official client; it defaults to `C:\Program Files\Tailscale`
-- **macOS**: run `brew install tailscale`. The App Store build ships no standalone `tailscaled` and cannot be used.
+- **Windows**: the official GUI client installs both `tailscaled.exe` and `tailscale.exe` (default `C:\Program Files\Tailscale`); the plugin reuses that `tailscaled.exe`.
+- **macOS**: run `brew install tailscale`. The GUI installers (App Store or the official pkg) run the daemon inside a Network Extension (under `/Library/SystemExtensions`) and leave only a `tailscale` CLI on disk — no `tailscaled` to start — so a GUI install cannot provide the plugin's private daemon. Use Homebrew or a source build.
 
 Binary paths are normally detected automatically. If detection fails, set `tailscaledPath` and `tailscalePath` in `config.json`.
+
+On macOS the userspace instance:
+
+- runs as the current user — **no root or admin rights** — and creates no TUN device, route or DNS change
+- coexists with a signed-in graphical Tailscale (App Store or official pkg): separate socket and state directory, no interference
+- signs in through the browser on first use, naming the device `dsh-<hostname>`, or with an auth key
+- uses the same panel, icon and login-link handling as on Windows
+
+Platform verification:
+
+| Platform | Result | Notes |
+|---|---|---|
+| Windows 10 / 11 | Verified | The official client ships `tailscaled.exe`; exit/direct separation, `web_fetch` and Shell proxying have been verified across releases |
+| macOS 13+ | Verified | Requires the Homebrew `tailscaled`; verified on macOS 26.6 (arm64) with Tailscale 1.102.2: sign-in, Exit Node, `web_fetch`, Shell proxying and tailnet access |
+| Linux | Unverified | Only binary candidate paths are kept; no end-to-end test |
 
 ### Compatibility
 
@@ -359,7 +392,7 @@ On the rc.5 search provider change: the base composition no longer fixes `search
 
 Install from npm:
 
-```powershell
+```sh
 npm install dsh-tailtransit
 ```
 
@@ -367,8 +400,8 @@ Then install the package through the Harness plugin manager (`install_bundle`, w
 
 To modify the source, clone the repository instead:
 
-```powershell
-git clone https://github.com/jetruan/dsh-tailtransit.git D:\tools\dsh-tailtransit
+```sh
+git clone https://github.com/jetruan/dsh-tailtransit.git <target-directory>
 ```
 
 Install that directory through the plugin manager, using its **absolute path** as target.
@@ -401,14 +434,14 @@ On first launch Tailtransit enters the configuration wizard automatically, which
 2. **Exit Node selection**: choose an Exit Node, or skip it to reach the tailnet only.
 3. **Traffic scope**: decide whether other plugins use the proxy, and how an unavailable Exit Node is handled.
 
-Authentication is required only once. Runtime state and credentials are stored in `%USERPROFILE%\.dsh\tailtransit`.
+Authentication is required only once. Runtime state and credentials are stored in `$DSH_HOME/tailtransit` (`%USERPROFILE%\.dsh\tailtransit` on Windows, `~/.dsh/tailtransit` on macOS and Linux).
 
 ### Traffic coverage
 
 | Traffic type | Mechanism | Activation | Default | Behaviour when enabled |
 |---|---|---|---|---|
 | Web Fetch | Registers a fetch provider; the bundle patch points `web.fetchProvider` at `tailtransit` | Immediate | Enabled | Requests are forwarded through the Exit Node |
-| Shell | Writes `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` and `NODE_USE_ENV_PROXY` into the Harness process environment | Child processes started afterwards | Enabled | Child processes inherit the proxy configuration |
+| Shell | Writes `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` into the Harness process environment; `NODE_USE_ENV_PROXY` is passed to children by the launcher and `dsh-subprocess`, deliberately not set in the Harness process itself | Child processes started afterwards | Enabled | Child processes inherit the proxy configuration |
 | Other plugins | Writes `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` into `$DSH_HOME/.env` | After a Harness restart | Enabled | Plugins' own `fetch` calls use the proxy |
 | LLM | Adjusts the LLM domain list in `.env`'s `NO_PROXY` | After a Harness restart | Disabled | LLM and account requests are forwarded through the Exit Node |
 
@@ -449,7 +482,7 @@ Priority: `<stateDir>/config.json` overrides the bundle patch `config`, which ov
 | `proxyShell` | `true` | Whether to inject proxy environment variables into the shell |
 | `webFetch` | `true` | Whether `web_fetch` is forwarded through the Exit Node |
 | `llmProxy` | `false` | Whether LLM and account requests are forwarded through the Exit Node. Requires a Harness restart. |
-| `llmNoProxy` | `deepseek.com,deepseeksvc.com` | LLM domains kept direct while `llmProxy` is disabled |
+| `llmNoProxy` | Empty | Extra LLM domains kept direct. Endpoints are discovered from the provider configuration and added to `NO_PROXY`; this field only adds to that list |
 | `noProxy` | `localhost,127.0.0.1,::1` | Domains and IPs that bypass the proxy, comma separated |
 | `timeoutMs` / `maxRedirects` / `maxResponseBytes` / `maxBodyChars` | 30s / 5 / 5MB / 100k | Fetch limits |
 
@@ -477,7 +510,7 @@ This configuration applies to every profile and plugin under the same `DSH_HOME`
 - **TCP only**. Under userspace mode, `ssh`, ICMP and UDP are not proxied; `ssh` requires `ProxyCommand`.
 - **An additional tailnet device appears** and must be authorised to use an Exit Node in the admin console.
 - **MagicDNS and split DNS are limited**; ordinary domain names still resolve through the system DNS.
-- **macOS support is experimental**. The Unix socket and SIGTERM handling are implemented for macOS but have not been fully validated on real hardware.
+- **macOS requires the Homebrew `tailscaled`**. The graphical installers (App Store or the official pkg) provide no standalone daemon. The Unix socket and SIGTERM handling are verified on macOS 26.6 (arm64); Linux is still untested.
 - The plugin pins `web.fetchProvider` to `tailtransit`. Disabling it without uninstalling causes `web_fetch` to report an unregistered provider.
 - Plugins installed from a profile cannot resolve `@deepseek-ai/*`, so no Config schema is provided; settings are available only through the panel and `config.json`.
 - After modifying the client component, Harness must be fully restarted; refreshing the page does not load the new code.
@@ -492,21 +525,24 @@ Report security vulnerabilities privately as described in [SECURITY.md](SECURITY
 
 ### Development
 
-```powershell
-node --test test/transport.test.mjs
+```sh
+npm test                     # transport / noproxy / probe / daemon / sensitive-gate
 node --check index.js
 node --check client.js
 ```
 
+`test/daemon.test.mjs` needs a local `tailscaled`; it skips and exits 0 when none is found. Point it at a specific binary with `TAILTRANSIT_TAILSCALED=/path/to/tailscaled`.
+
 Run `npm run hooks:install` once per clone; `git commit` then runs the privacy gate, which blocks IP addresses, emails, internal hostnames and credentials. Scan manually with `npm run check:privacy`. See [CONTRIBUTING.md](CONTRIBUTING.md#隐私门禁) for the rules.
 
 ```
-index.js          Host half: tailscaled lifecycle, proxy, routing, tools (~1.2k lines)
-client.js         Client half: panel, wizard, settings (~750 lines)
-transport.js      Dependency-free HTTP / SOCKS5 proxy transport
+index.js          Host half: tailscaled lifecycle, sign-in, Exit Node, routing, tools
+client.js         Client half: panel, wizard, settings
+transport.js      Dependency-free HTTP proxy transport
+noproxy.js        NO_PROXY and LLM endpoint discovery/merging
 cordis.patch.yml  Bundle patch pointing web.fetchProvider at tailtransit
 locale/           Chinese and English metadata
-test/             transport tests
+test/             transport / probe / daemon / privacy-gate tests
 ```
 
 When debugging, start with the module comment at the top of `index.js`, which describes the overall design. To validate a change: run the syntax check, reinstall the bundle, then request `/api/tailtransit/diag` and confirm whether `rev` has changed.

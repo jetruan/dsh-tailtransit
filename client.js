@@ -235,6 +235,7 @@ window.__ModuleLoader__.load({
         external: '外部代理',
         externalUnreachable: '外部代理不可达',
         disabled: '已停用',
+        missingBinary: '未检测到 Tailscale',
         unsupported: '不支持',
         unknown: '未知',
         reading: '读取中',
@@ -267,7 +268,7 @@ window.__ModuleLoader__.load({
         connectTitle: '连接 Tailscale',
         connectDesc: '使用独立用户态实例加入 tailnet，不影响系统上的 Tailscale 服务。',
         connected: '已连接',
-        notFoundDarwin: '未找到 Tailscale。请先执行 brew install tailscale（或安装官方客户端）后重试。',
+        notFoundDarwin: '未找到独立的 tailscaled。请先执行 brew install tailscale 后重试。',
         notFound: '未找到 Tailscale，请先安装客户端后重试。',
         waitingAuth: '等待授权…',
         loginInBrowser: '在浏览器中登录',
@@ -282,6 +283,7 @@ window.__ModuleLoader__.load({
         exitTitle: '选择出口节点',
         exitDesc: 'Harness 的公网请求从这台节点出去；也可以只访问 tailnet 内网。',
         noExitNode: '不使用出口节点',
+        loadingExitNodes: '正在读取出口节点…',
         tailnetOnly: '只访问 tailnet',
         scopeTitle: '代理范围与策略',
         scopeDesc: 'web_fetch 与 shell 默认开启，这里决定其他插件和失败策略。',
@@ -343,6 +345,7 @@ window.__ModuleLoader__.load({
         external: 'External proxy',
         externalUnreachable: 'External proxy unreachable',
         disabled: 'Disabled',
+        missingBinary: 'Tailscale not installed',
         unsupported: 'Unsupported',
         unknown: 'Unknown',
         reading: 'Loading',
@@ -375,7 +378,7 @@ window.__ModuleLoader__.load({
         connectTitle: 'Connect to Tailscale',
         connectDesc: 'Joins the tailnet with its own userspace instance, leaving the system Tailscale service untouched.',
         connected: 'Connected',
-        notFoundDarwin: 'Tailscale not found. Run brew install tailscale (or install the official client), then retry.',
+        notFoundDarwin: 'The standalone tailscaled was not found. Run brew install tailscale, then retry.',
         notFound: 'Tailscale not found. Install the client, then retry.',
         waitingAuth: 'Waiting for approval…',
         loginInBrowser: 'Sign in with a browser',
@@ -390,6 +393,7 @@ window.__ModuleLoader__.load({
         exitTitle: 'Choose an exit node',
         exitDesc: 'Harness public requests leave through this node; you can also reach the tailnet only.',
         noExitNode: 'No exit node',
+        loadingExitNodes: 'Loading exit nodes…',
         tailnetOnly: 'Tailnet only',
         scopeTitle: 'Scope and failure policy',
         scopeDesc: 'web_fetch and shell are on by default; this decides other plugins and what happens on failure.',
@@ -436,6 +440,7 @@ window.__ModuleLoader__.load({
         case 'external': return 'external'
         case 'external-unreachable': return 'externalUnreachable'
         case 'disabled': return 'disabled'
+        case 'missing-binary': return 'missingBinary'
         case 'unsupported': return 'unsupported'
         default: return 'unknown'
       }
@@ -463,7 +468,7 @@ window.__ModuleLoader__.load({
       if (!enabled) return 'err'
       if (state === 'Running' || state === 'external') return 'ok'
       if (state === 'starting' || state === 'NeedsLogin' || state === 'external-unreachable') return 'warn'
-      if (state === 'failed' || state === 'daemon-exited' || state === 'unsupported') return 'err'
+      if (state === 'failed' || state === 'daemon-exited' || state === 'missing-binary' || state === 'unsupported') return 'err'
       return 'idle'
     }
 
@@ -542,6 +547,32 @@ window.__ModuleLoader__.load({
         return () => clearInterval(timer)
       }, [load])
 
+      // The browser login happens in another tab, so the panel has to notice
+      // when the user comes back: background tabs throttle timers, and the
+      // 5 s tick can arrive a minute late. Refresh on return, and poll faster
+      // while the wizard is waiting for the node to come up.
+      useEffect(() => {
+        const refresh = () => { load() }
+        const onVisibility = () => { if (document.visibilityState === 'visible') load() }
+        window.addEventListener('focus', refresh)
+        document.addEventListener('visibilitychange', onVisibility)
+        return () => {
+          window.removeEventListener('focus', refresh)
+          document.removeEventListener('visibilitychange', onVisibility)
+        }
+      }, [load])
+
+      // The wizard shows peer data (the exit-node picker) that a just-started
+      // daemon fills in a few seconds late, so poll faster for as long as it is
+      // open. The server refreshes its own snapshot on demand, so this stays
+      // cheap.
+      const wizardPolling = Boolean(wizardOpen)
+      useEffect(() => {
+        if (!wizardPolling) return undefined
+        const timer = setInterval(load, 2000)
+        return () => clearInterval(timer)
+      }, [wizardPolling, load])
+
       const loadSettings = useCallback(async () => {
         try {
           const response = await fetch(`${API}/settings`, { headers: { accept: 'application/json' } })
@@ -558,8 +589,12 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         if (!settings || settings.onboarded) return
-        if ((status && status.state === 'NeedsLogin') || settings.installed === false) setWizardOpen(true)
-      }, [settings, status])
+        // Open on any not-yet-onboarded mount. Keying this off `NeedsLogin`
+        // alone let the wizard vanish after a successful login: remounting the
+        // panel (switching plugin pages) landed on the main view with the
+        // exit-node and scope steps still unanswered.
+        setWizardOpen(true)
+      }, [settings])
 
       const applyPort = async () => {
         const value = Number(port)
@@ -653,13 +688,20 @@ window.__ModuleLoader__.load({
 
       const startLogin = async () => {
         setWizardBusy('login')
+        // Claim the tab while the click's user gesture is still live: a
+        // window.open after `await fetch` counts as a popup and gets blocked.
+        let tab = null
+        try { tab = window.open('about:blank', '_blank') } catch {}
         try {
           const response = await fetch(`${API}/login`, { method: 'POST' })
           const body = await response.json()
           const url = (body && body.status && body.status.loginUrl) || (status && status.loginUrl)
-          if (url) window.open(url, '_blank', 'noreferrer')
+          if (url && tab && !tab.closed) tab.location.replace(url)
+          else if (url) window.open(url, '_blank', 'noreferrer')
+          else if (tab) tab.close()
           await load()
         } catch (cause) {
+          try { if (tab) tab.close() } catch {}
           setError(cause && cause.message ? cause.message : String(cause))
         } finally {
           setWizardBusy('')
@@ -818,7 +860,11 @@ window.__ModuleLoader__.load({
             : null,
           h('div', { className: 'tse-wiz-foot' },
             h('div', { className: 'grow' }),
-            h('button', { className: 'tse-btn primary', disabled: !connected, onClick: () => setStep(2) }, t('next'))))
+            h('button', {
+              className: 'tse-btn primary',
+              disabled: !connected,
+              onClick: () => { setStep(2); load() },
+            }, t('next'))))
 
         const stepTwo = h('section', { className: 'tse-card' },
           h('h2', { className: 'tse-wiz-title' }, t('exitTitle')),
@@ -830,7 +876,10 @@ window.__ModuleLoader__.load({
               onClick: () => set({ exitNode: '' }, 'node'),
             },
               h('span', null, t('noExitNode')),
-              h('span', { className: 'tse-node-ip' }, t('tailnetOnly')))),
+              h('span', { className: 'tse-node-ip' }, t('tailnetOnly'))),
+            options.length === 0 && s && s.state === 'Running'
+              ? h('div', { className: 'tse-wiz-note' }, t('loadingExitNodes'))
+              : null),
           h('div', { className: 'tse-wiz-foot' },
             h('button', { className: 'tse-btn ghost', onClick: () => setStep(1) }, t('prev')),
             h('div', { className: 'grow' }),
@@ -1070,7 +1119,7 @@ window.__ModuleLoader__.load({
               kv(t('localProxy'), enabled && s && s.proxyReady ? proxyLabel : '—'),
               kv(t('exitIp'), test && test.proxied ? test.proxied : t('untested')),
               kv(t('directIp'), test && test.direct ? test.direct : '—'),
-              s && s.loginUrl
+              s && s.loginUrl && s.state !== 'Running'
                 ? h('div', { className: 'tse-login' },
                     h('a', { href: s.loginUrl, target: '_blank', rel: 'noreferrer' }, t('loginRequired')))
                 : null),

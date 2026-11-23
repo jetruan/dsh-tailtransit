@@ -1,9 +1,10 @@
 /**
  * dsh-tailtransit — Harness-scoped Tailscale egress.
  *
- * Tailscale on Windows is a machine-wide VPN: a TUN adapter, a default route
- * and system DNS. There is no per-process split tunneling, so a global exit
- * node and an existing VPN fight over the same routes.
+ * Tailscale on Windows and macOS is a machine-wide VPN: a TUN adapter or
+ * NetworkExtension, a default route and system DNS. Neither ships per-process
+ * split tunneling, so a global exit node and an existing VPN fight over the
+ * same routes.
  *
  * This plugin sidesteps the fight instead of isolating the service: it runs a
  * *second*, per-user `tailscaled` in userspace-networking mode (no TUN, no
@@ -50,12 +51,33 @@ export const inject = ['web', 'tools', 'webServer', 'clientModules']
 const PROVIDER_ID = 'tailtransit'
 const IS_WINDOWS = process.platform === 'win32'
 const IS_MAC = process.platform === 'darwin'
+const IS_SUPPORTED = IS_WINDOWS || IS_MAC
 
-function firstExisting(candidates, fallback) {
+/** First candidate that exists, or `''` so the caller can report a real miss. */
+function firstExisting(candidates) {
   for (const candidate of candidates) {
     try { if (existsSync(candidate)) return candidate } catch {}
   }
-  return fallback || candidates[0]
+  return ''
+}
+
+/**
+ * Resolve a command on `PATH`.
+ *
+ * A GUI-launched Harness inherits a short `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`),
+ * so this only helps agents started from a shell or with a custom prefix; the
+ * explicit candidate lists stay the primary source.
+ */
+function findOnPath(command) {
+  const names = IS_WINDOWS ? [`${command}.exe`] : [command]
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue
+    for (const name of names) {
+      const candidate = path.join(dir, name)
+      try { if (existsSync(candidate)) return candidate } catch {}
+    }
+  }
+  return ''
 }
 
 const TAILSCALED_CANDIDATES = IS_WINDOWS
@@ -70,8 +92,26 @@ const TAILSCALE_CANDIDATES = IS_WINDOWS
     ? ['/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale', '/opt/homebrew/sbin/tailscale', '/usr/local/sbin/tailscale']
     : ['/usr/bin/tailscale', '/usr/sbin/tailscale', '/usr/local/bin/tailscale']
 
-const DEFAULT_TAILSCALED = firstExisting(TAILSCALED_CANDIDATES, TAILSCALED_CANDIDATES[0])
-const DEFAULT_TAILSCALE = firstExisting(TAILSCALE_CANDIDATES, TAILSCALE_CANDIDATES[0])
+/**
+ * Resolve the daemon and its CLI as a pair.
+ *
+ * The binary next to `tailscaled` wins over a `tailscale` found elsewhere:
+ * Homebrew installs both side by side, while the macOS graphical installer
+ * also leaves a `tailscale` shim at `/usr/local/bin` that drives the *system*
+ * Tailscale.
+ * Pairing keeps every CLI call pointed at the per-user instance this plugin
+ * owns, so an exit-node change can never reach the system daemon.
+ */
+function resolveBinaryPaths() {
+  const daemon = firstExisting(TAILSCALED_CANDIDATES) || findOnPath('tailscaled') || TAILSCALED_CANDIDATES[0]
+  const sibling = path.join(path.dirname(daemon), IS_WINDOWS ? 'tailscale.exe' : 'tailscale')
+  const cli = firstExisting([sibling, ...TAILSCALE_CANDIDATES]) || findOnPath('tailscale') || TAILSCALE_CANDIDATES[0]
+  return { daemon, cli }
+}
+
+const BINARY_PATHS = resolveBinaryPaths()
+const DEFAULT_TAILSCALED = BINARY_PATHS.daemon
+const DEFAULT_TAILSCALE = BINARY_PATHS.cli
 const DEFAULT_PORT = 18888
 
 /**
@@ -157,9 +197,15 @@ function resolveConfig(raw) {
   const text = (value, fallback) => (typeof value === 'string' ? value : fallback)
   const number = (value, fallback) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
   const bool = (value, fallback) => (typeof value === 'boolean' ? value : fallback)
+  const tailscaledPath = text(source.tailscaledPath, DEFAULT_CONFIG.tailscaledPath)
+  // Keep the CLI beside the daemon unless one is configured explicitly, so an
+  // overridden path is not silently paired with the macOS graphical shim.
+  const siblingCli = path.join(path.dirname(tailscaledPath), IS_WINDOWS ? 'tailscale.exe' : 'tailscale')
+  let pairedCli = ''
+  try { if (existsSync(siblingCli)) pairedCli = siblingCli } catch {}
   return {
-    tailscaledPath: text(source.tailscaledPath, DEFAULT_CONFIG.tailscaledPath),
-    tailscalePath: text(source.tailscalePath, DEFAULT_CONFIG.tailscalePath),
+    tailscaledPath,
+    tailscalePath: text(source.tailscalePath, pairedCli || DEFAULT_CONFIG.tailscalePath),
     stateDir: text(source.stateDir, DEFAULT_CONFIG.stateDir),
     proxyPort: number(source.proxyPort, DEFAULT_CONFIG.proxyPort),
     proxyUrl: text(source.proxyUrl, DEFAULT_CONFIG.proxyUrl).trim(),
@@ -210,6 +256,43 @@ async function readFileIfPresent(file) {
   } catch {
     return ''
   }
+}
+
+/** Files that must exist before `tailscaled` can be spawned. */
+async function missingBinaries(paths) {
+  const missing = []
+  for (const file of paths) {
+    try { await access(file) } catch { missing.push(file) }
+  }
+  return missing
+}
+
+/**
+ * Actionable replacement for a bare `spawn ENOENT`.
+ *
+ * macOS is the case worth spelling out: both GUI installers — the App Store
+ * build and the official `macsys` pkg — move the daemon into a Network
+ * Extension (a system extension under `/Library/SystemExtensions`) and leave
+ * only a `tailscale` CLI behind. Nothing named `tailscaled` reaches the disk,
+ * so a userspace instance can only come from Homebrew or a source build. The
+ * Windows GUI installer, by contrast, ships `tailscaled.exe` directly, which
+ * is why the same workflow works there.
+ */
+function missingBinariesMessage(missing) {
+  const list = missing.map((file) => `"${file}"`).join(', ')
+  if (IS_MAC) {
+    const guiApp = '/Applications/Tailscale.app'
+    let guiInstalled = false
+    try { guiInstalled = existsSync(guiApp) } catch {}
+    const lead = guiInstalled
+      ? `the Tailscale.app GUI build found here runs its daemon as a system extension and exposes no standalone tailscaled`
+      : 'the macOS GUI installers expose no standalone tailscaled'
+    return `cannot find ${list}; ${lead} — run "brew install tailscale", or point tailscaledPath at a binary you built`
+  }
+  if (IS_WINDOWS) {
+    return `cannot find ${list}; install the official Tailscale client or set tailscaledPath in config.json`
+  }
+  return `cannot find ${list}; install the tailscale package or set tailscaledPath in config.json`
 }
 
 function tcpReachable(port, host = '127.0.0.1', timeoutMs = 1000) {
@@ -323,6 +406,8 @@ class TailscaleEgress {
     this.lastError = ''
     this.logTail = []
     this.info = null
+    this.infoAt = 0
+    this.refreshing = null
     this.proxyReady = false
     this.backendState = 'starting'
     this.timer = null
@@ -439,9 +524,11 @@ class TailscaleEgress {
   async start() {
     this.stopping = false
     this.lastError = ''
-    if (process.platform !== 'win32') {
+    // A restart re-reads the daemon state; never keep a URL from an old attempt.
+    this.loginUrl = ''
+    if (!IS_SUPPORTED) {
       this.backendState = 'unsupported'
-      this.lastError = 'Harness-scoped Tailscale egress is implemented for Windows only'
+      this.lastError = `Harness-scoped Tailscale egress is supported on Windows and macOS; this host reports ${process.platform}`
       return
     }
     try {
@@ -453,9 +540,9 @@ class TailscaleEgress {
     }
 
     this.external = Boolean(this.config.proxyUrl)
-    if (this.config.envProxy !== false) await this.writeLauncherProxy()
-    else await this.clearLauncherProxy()
     if (this.external) {
+      if (this.config.envProxy !== false) await this.writeLauncherProxy()
+      else await this.clearLauncherProxy()
       this.applyProcessEnv()
       const endpoint = this.proxyEndpoint()
       this.proxyReady = await tcpReachable(endpoint.port, endpoint.host)
@@ -467,6 +554,19 @@ class TailscaleEgress {
       return
     }
 
+    // External proxy mode needs no binaries; the userspace daemon does.
+    const missing = await missingBinaries([this.config.tailscaledPath, this.config.tailscalePath])
+    if (missing.length > 0) {
+      this.backendState = 'missing-binary'
+      this.lastError = missingBinariesMessage(missing)
+      // Never point the launcher at a proxy that cannot exist: a stale entry
+      // would send every plugin's first fetch to a dead loopback port.
+      await this.clearLauncherProxy()
+      return
+    }
+
+    if (this.config.envProxy !== false) await this.writeLauncherProxy()
+    else await this.clearLauncherProxy()
     await this.reapStaleDaemon()
     this.applyProcessEnv()
     this.spawnDaemon()
@@ -548,7 +648,11 @@ class TailscaleEgress {
     try {
       const raw = JSON.parse(await readFile(this.settingsFile, 'utf8'))
       if (raw !== null && typeof raw === 'object') {
-        this.config = resolveConfig({ ...this.config, ...raw })
+        const merged = { ...this.config, ...raw }
+        // A daemon path set on its own must re-pair the CLI; keeping the
+        // already-resolved `tailscalePath` would skip the sibling lookup.
+        if (typeof raw.tailscaledPath === 'string' && !Object.hasOwn(raw, 'tailscalePath')) delete merged.tailscalePath
+        this.config = resolveConfig(merged)
         this.port = this.config.proxyPort
       }
     } catch {}
@@ -652,9 +756,12 @@ class TailscaleEgress {
   }
 
   /**
+   * Keep a long-lived LocalAPI client attached to the userspace daemon.
+   *
    * Windows tailscaled stops the backend when its last LocalAPI client
-   * disconnects (the GUI normally holds that connection). A long-lived
-   * `debug watch-ipn` subscription keeps the userspace node running.
+   * disconnects (the GUI normally holds that connection). macOS keeps the
+   * backend alive on its own — verified against 1.104.7 — and the watch is
+   * harmless there, so one code path covers both.
    */
   startWatch() {
     if (this.watchChild || this.stopping) return
@@ -806,18 +913,40 @@ class TailscaleEgress {
     this.config.authKeyFile = file
   }
 
+  /**
+   * Wait until `tailscale up` prints its login URL.
+   *
+   * The URL arrives on the child's stderr a moment after the spawn, so the
+   * request must not answer before it exists: the panel opens that URL in a
+   * browser tab, and a missing URL makes the button look like it did nothing.
+   */
+  async waitForLoginUrl(timeoutMs) {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      if (this.loginUrl) return this.loginUrl
+      if (this.backendState === 'Running' || this.stopping) return ''
+      await sleep(200)
+    }
+    return this.loginUrl
+  }
+
   async ensureAuthenticated() {
     if (!this.proxyReady) return
     const status = await this.statusJson()
     if (status) {
       this.info = status
+      this.infoAt = Date.now()
       this.backendState = status.BackendState || this.backendState
-      if (status.AuthURL) this.loginUrl = status.AuthURL
       if (status.BackendState === 'Running') {
+        // The daemon keeps no AuthURL after a successful login, so the URL this
+        // instance captured from `tailscale up` is the only stale copy left;
+        // keeping it would offer "open the login page" on a signed-in node.
+        this.loginUrl = ''
         this.lastError = ''
         await this.maybeApplyExitNode(status)
         return
       }
+      if (status.AuthURL) this.loginUrl = status.AuthURL
     }
 
     const key = await this.resolveAuthKey()
@@ -888,11 +1017,14 @@ class TailscaleEgress {
       return
     }
     this.info = status
+    this.infoAt = Date.now()
     this.backendState = status.BackendState || this.backendState
-    if (status.AuthURL) this.loginUrl = status.AuthURL
     if (status.BackendState === 'Running') {
+      this.loginUrl = ''
       this.lastError = ''
       await this.maybeApplyExitNode(status)
+    } else if (status.AuthURL) {
+      this.loginUrl = status.AuthURL
     }
   }
 
@@ -906,7 +1038,10 @@ class TailscaleEgress {
     if (result.code === 0) {
       this.lastError = ''
       const updated = await this.statusJson()
-      if (updated) this.info = updated
+      if (updated) {
+        this.info = updated
+        this.infoAt = Date.now()
+      }
     } else {
       this.lastError = (result.err || result.out || `tailscale set exited with code ${result.code}`).trim()
     }
@@ -957,7 +1092,27 @@ class TailscaleEgress {
     }
   }
 
+  /**
+   * Keep the cached status fresh enough for the panel.
+   *
+   * `start()` seeds `info` as soon as the proxy answers, which can be before
+   * control has delivered the netmap: the node is `Running` with an empty peer
+   * list, so the exit-node picker renders nothing and stays that way for a
+   * whole 15 s refresh interval. The panel asks every few seconds, so a stale
+   * snapshot is refreshed on demand instead of served as-is.
+   *
+   * Concurrent polls share one in-flight CLI call.
+   */
+  async freshInfo(maxAgeMs = 3000) {
+    if (this.stopping || this.external || !this.proxyReady) return
+    if (this.infoAt > 0 && Date.now() - this.infoAt < maxAgeMs) return
+    if (this.refreshing) return this.refreshing
+    this.refreshing = this.refresh().finally(() => { this.refreshing = null })
+    await this.refreshing
+  }
+
   async statusPayload() {
+    await this.freshInfo()
     const peers = Object.values(this.info?.Peer ?? {})
     const current = this.info?.ExitNodeStatus
     const exitPeer = current ? peers.find((peer) => peer.ID === current.ID) : undefined
@@ -1030,6 +1185,7 @@ class TailscaleEgress {
   }
 
   async describe(action) {
+    await this.freshInfo(2000)
     if (action === 'restart') {
       await this.restart()
     }
@@ -1040,7 +1196,7 @@ class TailscaleEgress {
         this.upChild = null
       }
       await this.beginLogin()
-      await sleep(1500)
+      await this.waitForLoginUrl(8000)
       await this.refresh()
     }
 
@@ -1079,7 +1235,7 @@ class TailscaleEgress {
     } else if (this.config.exitNode) {
       lines.push(`exit node configured: ${this.config.exitNode} (not applied yet)`)
     }
-    if (this.loginUrl) lines.push(`login: ${this.loginUrl}`)
+    if (this.loginUrl && this.backendState !== 'Running') lines.push(`login: ${this.loginUrl}`)
     if (this.lastError) lines.push(`last error: ${this.lastError}`)
     if (this.logTail.length > 0) lines.push(`daemon log:\n${this.logTail.slice(-6).join('\n')}`)
     return lines.join('\n')

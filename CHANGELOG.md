@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.2.9 — 2026-11-23
+
+让 macOS 真正可用。0.2.5 ~ 0.2.8 的文档写着支持 macOS，但 `start()` 在非 Windows 平台直接返回 `unsupported`，插件在这台 Mac 上只注册了面板、从未启动过 daemon。
+
+**修复**
+
+- 平台闸门改为允许 `win32` 与 `darwin`，其他平台仍返回 `unsupported`，并在错误里说明支持范围。
+- 新增启动前二进制检查：`tailscaled` / `tailscale` 缺失时状态为 `missing-binary`，给出可操作提示（macOS 指向 `brew install tailscale`，并说明图形界面安装包不含 `tailscaled`），不再让 `spawn` 抛 ENOENT 后只剩一句 "failed to start"。
+- 二进制改为成对解析：优先取 `tailscaled` 同目录下的 `tailscale`，避免 macOS 上 `/usr/local/bin/tailscale`（图形界面客户端的 shim）与 Homebrew 的 `tailscaled` 混搭；显式候选都不存在时再查 `PATH`。
+- 面板新增 `missing-binary` 状态，中英文文案与错误色同步。
+- `debug watch-ipn` 继续保持常开：实测 macOS 1.104.7 在没有 LocalAPI 客户端时 daemon 不会退出，watch 无害，两个平台共用同一条监督路径。
+
+**首次登录流程修复**
+
+- 登录完成后不再残留登录链接：节点进入 `Running` 时清空 `loginUrl`，`describe()` 也不再打印 `login:`。此前面板会在「运行中」旁边一直显示「需要登录 · 打开登录页」，实际上那是一次旧登录尝试留下的 URL。
+- `POST /api/tailtransit/login` 改为等待 URL 出现再返回（最多 8 秒）。以前固定等 1.5 秒，`tailscale up` 稍有延迟就返回空 URL，第一次点击看起来什么都没发生。
+- 面板在窗口重新获得焦点或变得可见时立即刷新，向导等待登录期间改为 2 秒轮询。浏览器会把后台标签页的定时器节流到分钟级，之前从登录页切回来时，「下一步」会长时间保持灰色。
+- 向导在任何「尚未完成引导」的面板挂载上都显示，不再只在 `NeedsLogin` 时显示。此前登录成功后切换插件页，会直接跳到主界面，而出口节点与范围两步还没答。
+- 登录按钮在点击瞬间同步占位新标签页，再把拿到 URL 的标签页导航过去；`await fetch` 之后再 `window.open` 会被当作弹窗拦截。
+- 出口节点列表不再「第一次打开是空的」：`start()` 会在控制面下发 netmap 之前缓存状态（`Running` 但 `Peer` 为空），而缓存此前 15 秒才刷新一次。现在状态超过 3 秒即按需刷新（并发请求合并为一次 CLI 调用），向导打开期间 2 秒轮询，点「下一步」时立即拉取；列表确实为空时显示「正在读取出口节点…」。
+
+**验证**
+
+环境：macOS 26.6.2 / arm64，Tailscale 1.104.7（Homebrew 包，临时解压到独立目录运行，未安装到系统）。
+
+- 用插件原样的参数启动用户态 daemon：不创建 TUN、不改路由与 DNS，与已登录的图形界面版 Tailscale（macsys 1.104.7）同时运行互不影响。
+- 同一端口同时提供 HTTP CONNECT 与 SOCKS5；`transport.js` 的 `fetchThroughProxy` 经该代理取回 `https://example.com/` 200，`probeOrigin` 返回可达。
+- LocalAPI unix socket 正常：`status --json` 返回 `NeedsLogin`，`tailscale up` 约 3 秒内产出登录链接，`ps -p <pid> -o comm=` 能识别残留 daemon 并回收。
+- 以 harness 驱动真实插件入口：工具、fetch provider、`/api/tailtransit` 路由均注册；`/status`、`/settings` 返回 `proxyReady: true`、`installed: true`、`platform: darwin`；卸载时 daemon 被回收。
+- 新增 `test/daemon.test.mjs`，覆盖上述启动、注册、状态、代理取页与回收；找不到 `tailscaled` 时自动跳过（退出码 0）。
+- 用伪 `tailscaled` / `tailscale` 驱动真实插件入口，验证登录状态机：`/login` 等到 URL、进入 `Running` 后清空 URL、`describe()` 不再显示登录行、卸载后 daemon 停止。8 项检查全部通过。
+- 同一套伪二进制模拟「`Running` 但 peer 列表晚到」：节点在 502ms 内出现在 `availableExitNodes` 中（修复前要等满 15 秒刷新周期）。
+
+**实机端到端验证**
+
+安装 Homebrew 版 Tailscale 1.102.2 后，在 macOS 26.6（arm64）上完成了一次真实登录与出口验证：
+
+- 出口节点下发成功且在线；经代理的出口 IP 与直连 IP 分离，`web_fetch` 与 Shell 命令都从出口节点出去，SOCKS5 与 HTTP 代理结果一致。
+- 经代理访问 tailnet 内网服务正常；面板 `/status`、`/settings`、`/test` 与工具 `describe` 返回一致。
+- Harness 进程自身未设置 `NODE_USE_ENV_PROXY`，模型与账号域名在 `NO_PROXY` 中保持直连；`~/.dsh/.env` 已写入受管代理块。
+- 系统图形界面版 Tailscale 仍为 `Running` 且未选择出口节点；插件使用独立进程、socket 与状态目录，不接管路由与 DNS。
+
+**已知限制**
+
+- 图形界面安装包（App Store 或官方 pkg）仍不能单独使用：它们提供 GUI 与 CLI，但不附带可独立运行的 `tailscaled`；Homebrew 版才提供。
+- Linux 仅保留可执行文件候选路径，未做端到端验证。
+
 ## 0.2.8 — 2026-11-19
 
 仅文档更新，无代码变更。

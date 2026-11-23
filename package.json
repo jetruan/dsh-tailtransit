@@ -1,6 +1,6 @@
 {
   "name": "dsh-tailtransit",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Give Harness its own Tailscale exit without changing how the rest of the machine connects: only web fetches and shell commands use the exit node, model traffic stays direct",
   "license": "MIT",
   "type": "module",
@@ -45,7 +45,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "node test/transport.test.mjs && node test/noproxy.test.mjs && node test/probe.test.mjs && node test/sensitive-gate.test.mjs",
+    "test": "node test/transport.test.mjs && node test/noproxy.test.mjs && node test/probe.test.mjs && node test/daemon.test.mjs && node test/sensitive-gate.test.mjs",
     "check:privacy": "node scripts/check-sensitive.mjs --all",
     "check:privacy:history": "node scripts/check-sensitive.mjs --history",
     "hooks:install": "git config core.hooksPath .githooks"
