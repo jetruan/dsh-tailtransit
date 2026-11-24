@@ -13,6 +13,9 @@ HANDOVER.md
 # scratch files used while writing commit messages
 .git-commit-msg.txt
 
+# one-off git bundle snapshots (e.g. taken before history rewrites); never commit these
+*.bundle
+
 # runtime state if a stateDir is ever pointed at the repository
 authkey
 daemon.pid
